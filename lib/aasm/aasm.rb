@@ -153,58 +153,72 @@ private
   def aasm_fire_event(name, options, *args)
     persist = options[:persist]
 
-    event = self.class.aasm_events[name]
-    begin
-      old_state = aasm_state_object_for_state(aasm_current_state)
+    process_event = lambda do 
+      event = self.class.aasm_events[name]
+      begin
+        old_state = aasm_state_object_for_state(aasm_current_state)
+        
+        old_state.fire_callbacks(:exit, self)
 
-
-      old_state.fire_callbacks(:exit, self)
-
-      # new event before callback
-      event.fire_callbacks(:before, self)
-
-      if new_state_name = event.fire(self, *args)
-        new_state = aasm_state_object_for_state(new_state_name)
-
-        # new before_ callbacks
-        old_state.fire_callbacks(:before_exit, self)
-        new_state.fire_callbacks(:before_enter, self)
-
-        new_state.fire_callbacks(:enter, self)
-
-        persist_successful = true
-        if persist
-          persist_successful = aasm_set_current_state_with_persistence(new_state_name)
-          event.execute_success_callback(self) if persist_successful
+        # new event before callback
+        event.fire_callbacks(:before, self)
+        
+        if new_state_name = event.fire(self, *args)
+          new_state = aasm_state_object_for_state(new_state_name)
+          
+          # new before_ callbacks
+          old_state.fire_callbacks(:before_exit, self)
+          new_state.fire_callbacks(:before_enter, self)
+          
+          new_state.fire_callbacks(:enter, self)
+          
+          persist_successful = true
+          if persist
+            persist_successful = aasm_set_current_state_with_persistence(new_state_name)
+            event.execute_success_callback(self) if persist_successful
+          else
+            self.aasm_current_state = new_state_name
+          end
+          
+          if persist_successful
+            old_state.fire_callbacks(:after_exit, self)
+            new_state.fire_callbacks(:after_enter, self)
+            event.fire_callbacks(:after, self)
+            
+            self.aasm_event_fired(name, old_state.name, self.aasm_current_state) if self.respond_to?(:aasm_event_fired)
+          else
+            self.aasm_event_failed(name, old_state.name) if self.respond_to?(:aasm_event_failed)
+          end
+          
+          persist_successful
+          
         else
-          self.aasm_current_state = new_state_name
+          if self.respond_to?(:aasm_event_failed)
+            self.aasm_event_failed(name, old_state.name)
+          end
+          
+          if AASM::StateMachine[self.class].config.whiny_transitions
+            raise AASM::InvalidTransition, "Event '#{event.name}' cannot transition from '#{self.aasm_current_state}'"
+          else
+            false
+          end
         end
-
-        if persist_successful
-          old_state.fire_callbacks(:after_exit, self)
-          new_state.fire_callbacks(:after_enter, self)
-          event.fire_callbacks(:after, self)
-
-          self.aasm_event_fired(name, old_state.name, self.aasm_current_state) if self.respond_to?(:aasm_event_fired)
-        else
-          self.aasm_event_failed(name, old_state.name) if self.respond_to?(:aasm_event_failed)
-        end
-
-        persist_successful
-
-      else
-        if self.respond_to?(:aasm_event_failed)
-          self.aasm_event_failed(name, old_state.name)
-        end
-
-        if AASM::StateMachine[self.class].config.whiny_transitions
-          raise AASM::InvalidTransition, "Event '#{event.name}' cannot transition from '#{self.aasm_current_state}'"
-        else
-          false
-        end
+      rescue StandardError => e
+        event.execute_error_callback(self, e)
       end
-    rescue StandardError => e
-      event.execute_error_callback(self, e)
+    end
+
+    # if we're performing this event and persisting, then wrap the operation inside
+    # a transaction to ensure that we don't end up with data inconsistency issues 
+    # do to :on_transition's executing 1/2 the way.
+    #
+    # NOTE - only works for rails - not sure how this would work in a ORM agnostic
+    # fashion.
+    if persist
+      self.class.connection.transaction(&process_event)
+    else
+      process_event.call()
     end
   end
+
 end

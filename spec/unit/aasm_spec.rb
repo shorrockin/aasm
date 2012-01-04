@@ -120,7 +120,6 @@ describe AASM, '- event firing without persistence' do
     end
 
     foo.should_receive(:aasm_write_state_without_persistence).twice
-
     foo.close
   end
 end
