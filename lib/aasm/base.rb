@@ -1,7 +1,7 @@
 module AASM
   class Base
     def self.whiny_transitions
-      @whiny_transitions ||= true
+      @whiny_transitions = true if @whiny_transitions == nil
     end
 
 
