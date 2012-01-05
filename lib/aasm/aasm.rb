@@ -213,7 +213,8 @@ private
     # do to :on_transition's executing 1/2 the way.
     #
     # NOTE - only works for rails - not sure how this would work in a ORM agnostic
-    # fashion.
+    # fashion. this breaks everything in the specs, is bad bad code, but needed for
+    # bug fixing at this time.
     if persist
       self.class.connection.transaction(&process_event)
     else

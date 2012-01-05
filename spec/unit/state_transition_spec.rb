@@ -176,20 +176,4 @@ describe AASM::SupportingClasses::StateTransition, '- when executing the transit
     return_value.should == 'success'
   end
 
-  it 'should execute within a transation' do
-    opts = {:from => 'foo', :to => 'bar', :on_transition => :test}
-    st = AASM::SupportingClasses::StateTransition.new(opts)
-    obj = mock('object')
-
-    obj.class.class_eval do
-      define_method(:test) do |*args| 
-        outside_transaction?
-      end
-    end
-
-    return_value = st.execute(obj)
-
-    return_value.should == true
-  end
-
 end

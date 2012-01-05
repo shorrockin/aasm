@@ -1,5 +1,15 @@
 module AASM
   class Base
+    def self.whiny_transitions
+      @whiny_transitions ||= true
+    end
+
+
+    def self.whiny_transitions=(value)
+      @whiny_transitions = value
+    end
+
+
     def initialize(clazz, options={}, &block)
       @clazz = clazz
       sm = AASM::StateMachine[@clazz]
@@ -7,7 +17,7 @@ module AASM
       if options.key?(:whiny_transitions)
         sm.config.whiny_transitions = options[:whiny_transitions]
       else
-        sm.config.whiny_transitions = true # this is the default, so let's cry
+        sm.config.whiny_transitions = AASM::Base.whiny_transitions
       end
     end
 
